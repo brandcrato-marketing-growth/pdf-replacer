@@ -1,89 +1,67 @@
 <!DOCTYPE html>
 <html lang="bn">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PDF Precision Text Replacer</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { background-color: #f4f7f6; color: #333; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-    .card { background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); width: 100%; max-width: 500px; }
-    h2 { text-align: center; margin-bottom: 20px; color: #2c3e50; }
-    .form-group { margin-bottom: 18px; }
-    label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: #555; }
-    input[type="file"], input[type="text"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
-    input:focus { border-color: #3498db; outline: none; }
-    button { width: 100%; background: #3498db; color: #fff; border: none; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.3s; }
-    button:hover { background: #2980b9; }
-    #status { margin-top: 15px; text-align: center; font-size: 14px; font-weight: 500; }
-    .error { color: #e74c3c; }
-    .success { color: #2ecc71; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Custom PDF Text Overwrite Editor</title>
+    <style>
+        body { font-family: sans-serif; display: flex; margin: 0; background: #f4f5f7; }
+        #sidebar { width: 350px; background: #fff; padding: 20px; border-right: 1px solid #ccc; height: 100vh; overflow-y: auto; }
+        #canvas-container { flex-grow: 1; padding: 20px; position: relative; overflow: auto; }
+        .text-block-input { width: 100%; margin-bottom: 10px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .editor-overlay-input { position: absolute; background: rgba(255, 255, 255, 0.9); border: 1px solid #007bff; font-family: inherit; }
+    </style>
 </head>
 <body>
-  <div class="card">
-    <h2>PDF টেক্সট এডিটর (Render Server)</h2>
-    <form id="pdfForm">
-      <div class="form-group">
-        <label>১. PDF ফাইল আপলোড করুন:</label>
-        <input type="file" id="pdfFile" accept="application/pdf" required>
-      </div>
-      <div class="form-group">
-        <label>২. যে টেক্সট পরিবর্তন করতে চান (Old Text):</label>
-        <input type="text" id="oldText" placeholder="যেমন: টিপস" required>
-      </div>
-      <div class="form-group">
-        <label>৩. নতুন যে টেক্সট বসাতে চান (New Text):</label>
-        <input type="text" id="newText" placeholder="যেমন: আইডিয়া" required>
-      </div>
-      <button type="submit" id="submitBtn">এডিট ও ডাউনলোড করুন</button>
-    </form>
-    <div id="status"></div>
-  </div>
 
-  <script>
-    document.getElementById('pdfForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      const fileInput = document.getElementById('pdfFile').files[0];
-      const oldText = document.getElementById('oldText').value;
-      const newText = document.getElementById('newText').value;
-      const statusDiv = document.getElementById('status');
-      const submitBtn = document.getElementById('submitBtn');
+<div id="sidebar">
+    <h2>পিডিএফ টেক্সট এডিটর</h2>
+    <input type="file" id="pdf-upload" accept="application/pdf,image/*">
+    <hr>
+    <h3>ডিটেক্ট করা টেক্সটসমূহ:</h3>
+    <div id="text-list"></div>
+</div>
 
-      const formData = new FormData();
-      formData.append('pdf_file', fileInput);
-      formData.append('old_text', oldText);
-      formData.append('new_text', newText);
+<div id="canvas-container">
+    <div id="page-wrapper" style="position: relative;"></div>
+</div>
 
-      statusDiv.className = '';
-      statusDiv.innerText = 'প্রসেসিং হচ্ছে... অনুগ্রহ করে অপেক্ষা করুন।';
-      submitBtn.disabled = true;
+<script>
+document.getElementById('pdf-upload').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
 
-      try {
-        const response = await fetch('/replace-text', { method: 'POST', body: formData });
-        if (response.ok) {
-          const blob = await response.blob();
-          const downloadUrl = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = 'edited_' + fileInput.name;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          statusDiv.className = 'success';
-          statusDiv.innerText = 'সফলভাবে প্রসেস সম্পন্ন হয়েছে!';
-        } else {
-          const result = await response.json();
-          statusDiv.className = 'error';
-          statusDiv.innerText = result.error || 'একটি সমস্যা হয়েছে!';
-        }
-      } catch (err) {
-        statusDiv.className = 'error';
-        statusDiv.innerText = 'সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি।';
-      } finally {
-        submitBtn.disabled = false;
-      }
+    const response = await fetch('/process-pdf', { method: 'POST', body: formData });
+    const data = await response.json();
+    
+    const textList = document.getElementById('text-list');
+    const wrapper = document.getElementById('page-wrapper');
+    textList.innerHTML = '';
+    wrapper.innerHTML = '';
+
+    data.blocks.forEach((block, index) => {
+        // সাইডবারে ইনপুট ফিল্ড তৈরি
+        const input = document.createElement('input');
+        input.className = 'text-block-input';
+        input.value = block.text.trim();
+        textList.appendChild(input);
+
+        // ক্যানভাসে পজিশন অনুযায়ী সরাসরি এডিটেবল ইনপুট বসানো
+        const overlay = document.createElement('textarea');
+        overlay.className = 'editor-overlay-input';
+        overlay.style.left = block.x + 'px';
+        overlay.style.top = block.y + 'px';
+        overlay.style.width = Math.max(block.w, 100) + 'px';
+        overlay.style.height = Math.max(block.h, 30) + 'px';
+        overlay.value = block.text.trim();
+
+        input.addEventListener('input', (ev) => { overlay.value = ev.target.value; });
+        overlay.addEventListener('input', (ev) => { input.value = ev.target.value; });
+
+        wrapper.appendChild(overlay);
     });
-  </script>
+});
+</script>
+
 </body>
 </html>
